@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = ""
     PROJECT_DESCRIPTION: str = ""
     SITE_NAME: str = ""
+    DB_URL: str = ""
 
 
 settings = Settings()

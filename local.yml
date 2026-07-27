@@ -1,0 +1,20 @@
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: ./backend/docker/local/postgres/Dockerfile
+    ports:
+      - "5434:5432"
+    volumes:
+      - ledgr_local_db:/var/lib/postgresql/data
+    env_file:
+      - ./.envs/.env.local
+    networks:
+      - ledgr_local_network
+
+networks:
+  ledgr_local_network:
+    external: true
+
+volumes:
+  ledgr_local_db:
