@@ -1,4 +1,54 @@
 services:
+  traefik:
+    image: docker.io/traefik:v3.2
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backend/docker/local/traefik/traefik.yml:/etc/traefik/traefik.yml
+    networks:
+      - ledgr_local_network
+
+  api: &api
+    build:
+      context: .
+      dockerfile: ./backend/docker/local/fastapi/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/src
+      - ./backend/app/logs:/src/backend/app/logs
+    networks:
+      - ledgr_local_network
+    env_file:
+      - ./.envs/.env.local
+    depends_on:
+      - postgres
+      - mailpit
+    command: /start.sh
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.routers.api.rule=Host(`api.localhost`)"
+      - "traefik.http.routers.api.service=api-service"
+      - "traefik.http.services.api-service.loadbalancer.server.port=8000"
+
+  mailpit:
+    image: docker.io/axllent/mailpit:v1.20.3
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    volumes:
+      - ledgr_mailpit_data:/data
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATA_FILE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    networks:
+      - ledgr_local_network
+
   postgres:
     build:
       context: .
@@ -18,3 +68,4 @@ networks:
 
 volumes:
   ledgr_local_db:
+  ledgr_mailpit_data:

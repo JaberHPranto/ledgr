@@ -1,7 +1,8 @@
 import os
 
-from app.core.config import settings
 from loguru import logger
+
+from backend.app.core.config import settings
 
 # removing default logger
 logger.remove()
