@@ -26,6 +26,8 @@ services:
     depends_on:
       - postgres
       - mailpit
+      - redis
+      - rabbitmq
     command: /start.sh
     labels:
       - "traefik.enable=true"
@@ -62,6 +64,59 @@ services:
     networks:
       - ledgr_local_network
 
+  redis:
+    image: docker.io/redis:7.0-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - ledgr_local_network
+    command: redis-server --appendonly yes
+
+  rabbitmq:
+    image: docker.io/rabbitmq:3.13-management
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    volumes:
+      - ledgr_rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - ledgr_local_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.entrypoints=web"
+      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.localhost`)"
+      - "traefik.http.routers.rabbitmq.service=rabbitmq-service"
+      - "traefik.http.services.rabbitmq-service.loadbalancer.server.port=15672"
+
+  celery:
+    <<: *api
+    ports: []
+    command: /start-worker.sh
+
+  flower:
+    <<: *api
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - rabbitmq
+    volumes:
+      - ledgr_flower_data:/data
+    networks:
+      - ledgr_local_network
+    command: /start-flower.sh
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flower.entrypoints=web"
+      - "traefik.http.routers.flower.rule=Host(`flower.localhost`)"
+      - "traefik.http.routers.flower.service=flower-service"
+      - "traefik.http.services.flower-service.loadbalancer.server.port=5555"
+
+  beat:
+    <<: *api
+    ports: []
+    command: /start-beat.sh
+
 networks:
   ledgr_local_network:
     external: true
@@ -69,3 +124,5 @@ networks:
 volumes:
   ledgr_local_db:
   ledgr_mailpit_data:
+  ledgr_rabbitmq_data:
+  ledgr_flower_data:
