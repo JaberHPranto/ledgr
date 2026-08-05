@@ -88,7 +88,7 @@ class HealthCheck:
             redis_client = celery_app.backend.client
             redis_client.ping()
             self._last_check["redis"] = datetime.now(timezone.utc)
-            logger.info("Redis health check successful")
+            # logger.info("Redis health check successful")
             return True
         except Exception:
             logger.error("Redis health check failed")
@@ -115,7 +115,7 @@ class HealthCheck:
                     conn.close()
 
             self._last_check["celery"] = datetime.now(timezone.utc)
-            logger.info("Celery health check successful")
+            # logger.info("Celery health check successful")
             return True
         except Exception:
             logger.error("Celery health check failed")
