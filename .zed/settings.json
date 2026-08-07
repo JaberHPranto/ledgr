@@ -1,0 +1,10 @@
+{
+  "languages": {
+    "HTML": {
+      "language_servers": ["!biome"],
+    },
+  },
+  "file_types": {
+    "Plain Text": ["backend/app/core/emails/templates/**/*.html"],
+  },
+}
