@@ -1,9 +1,9 @@
+import uuid
 from enum import Enum
 
 from fastapi.exceptions import HTTPException
-from pydantic import field_validator
+from pydantic import EmailStr, field_validator
 from sqlmodel import Field, SQLModel
-from sqlmodel.main import EmailStr
 
 
 class SecurityQuestionSchema(str, Enum):
@@ -72,3 +72,22 @@ class UserCreateSchema(BaseUserSchema):
                     },
                 )
         return field_value
+
+
+class UserReadSchema(BaseUserSchema):
+    id: uuid.UUID
+    full_name: str
+
+
+class EmailRequestSchema(SQLModel):
+    email: EmailStr
+
+
+class LoginRequestSchema(SQLModel):
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=20)
+
+
+class OTPVerifyRequestSchema(SQLModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
