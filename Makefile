@@ -1,6 +1,9 @@
 build:
 	docker compose -f local.yml up --build -d --remove-orphans
 
+build-api:
+	docker compose -f local.yml up --build -d api
+
 up:
 	docker compose -f local.yml up -d
 

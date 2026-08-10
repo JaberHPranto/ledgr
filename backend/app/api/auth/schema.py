@@ -1,8 +1,7 @@
 import uuid
 from enum import Enum
 
-from fastapi.exceptions import HTTPException
-from pydantic import EmailStr, field_validator
+from pydantic import EmailStr, ValidationInfo, field_validator
 from sqlmodel import Field, SQLModel
 
 
@@ -60,17 +59,9 @@ class UserCreateSchema(BaseUserSchema):
     confirm_password: str = Field(min_length=6, max_length=20)
 
     @field_validator("confirm_password")
-    def check_passwords_match(cls, field_value, values):
-        if "password" in values and "confirm_password" in values:
-            if field_value != values["password"]:
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "status": "error",
-                        "message": "Passwords do not match",
-                        "action": "Please ensure that the passwords you entered match",
-                    },
-                )
+    def check_passwords_match(cls, field_value: str, info: ValidationInfo) -> str:
+        if "password" in info.data and field_value != info.data["password"]:
+            raise ValueError("Passwords do not match")
         return field_value
 
 

@@ -3,7 +3,7 @@ from typing import AsyncGenerator
 
 from sqlalchemy import AsyncAdaptedQueuePool, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.ext.asyncio.session import AsyncSession
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.core.config import settings
 from backend.app.core.logging import get_logger
@@ -24,7 +24,7 @@ engine = create_async_engine(
 async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
     session = async_session()
     try:
         yield session
