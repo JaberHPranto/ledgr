@@ -58,3 +58,11 @@ docker compose -f local.yml exec -it -u 0 api alembic upgrade head
 ```
 docker compose -f local.yml exec -it -u 0 postgres psql -U pranto -d ledgr
 ```
+
+## Utilities
+
+### Generate secret keys
+
+```
+python -c "import secrets; print(secrets.token_urlsafe(38))"
+```

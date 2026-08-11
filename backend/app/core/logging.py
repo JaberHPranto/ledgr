@@ -23,7 +23,7 @@ logger.add(
     sink=os.path.join(LOG_DIR, "debug.log"),
     format=LOG_FORMAT,
     level="DEBUG"
-    if settings.Environment == "local"
+    if settings.ENVIRONMENT == "local"
     else "INFO",  # minimum level (sets the threshold/floor value)
     filter=lambda record: record["level"].no <= logger.level("WARNING").no,
     # debug, info, warning logs

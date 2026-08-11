@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+from fastapi import Response
 
 from backend.app.core.config import settings
 
@@ -53,3 +54,68 @@ def generate_activation_token(id: uuid.UUID) -> str:
     return jwt.encode(
         payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
     )
+
+
+def create_jwt_token(id: uuid.UUID, type: str = settings.COOKIE_ACCESS_NAME) -> str:
+    if type == settings.COOKIE_ACCESS_NAME:
+        expiration_minutes = settings.JWT_ACCESS_TOKEN_EXPIRATION_MINUTES
+    else:
+        expiration_minutes = settings.JWT_REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 60
+
+    payload = {
+        "id": str(id),
+        "type": type,
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=expiration_minutes),
+        "iat": datetime.now(timezone.utc),
+    }
+
+    return jwt.encode(payload, settings.SIGNING_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def set_auth_cookies(
+    response: Response, access_token: str, refresh_token: str | None
+) -> None:
+    base_cookie_settings = {
+        "path": settings.COOKIE_PATH,
+        "secure": settings.COOKIE_SECURE,
+        "httponly": settings.COOKIE_HTTP_ONLY,
+        "samesite": settings.COOKIE_SAMESITE,
+    }
+    access_cookie_settings = base_cookie_settings.copy()
+    access_cookie_settings["max_age"] = (
+        settings.JWT_ACCESS_TOKEN_EXPIRATION_MINUTES * 60
+    )
+
+    response.set_cookie(
+        key=settings.COOKIE_ACCESS_NAME,
+        value=access_token,
+        **access_cookie_settings,
+    )
+
+    if refresh_token:
+        refresh_cookie_settings = base_cookie_settings.copy()
+        refresh_cookie_settings["max_age"] = (
+            settings.JWT_REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 60 * 60
+        )
+        response.set_cookie(
+            key=settings.COOKIE_REFRESH_NAME,
+            value=refresh_token,
+            **refresh_cookie_settings,
+        )
+
+    logged_in_cookie_settings = base_cookie_settings.copy()
+    logged_in_cookie_settings["httponly"] = False
+    logged_in_cookie_settings["max_age"] = (
+        settings.JWT_ACCESS_TOKEN_EXPIRATION_MINUTES * 60
+    )
+    response.set_cookie(
+        key=settings.COOKIE_LOGGED_IN_NAME,
+        value="true",
+        **logged_in_cookie_settings,
+    )
+
+
+async def delete_auth_cookies(response: Response) -> None:
+    response.delete_cookie(settings.COOKIE_ACCESS_NAME)
+    response.delete_cookie(settings.COOKIE_REFRESH_NAME)
+    response.delete_cookie(settings.COOKIE_LOGGED_IN_NAME)
