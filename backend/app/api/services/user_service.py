@@ -19,6 +19,7 @@ from backend.app.api.auth.utils import (
 )
 from backend.app.core.config import settings
 from backend.app.core.logging import get_logger
+from backend.app.core.services.account_lockout import send_account_lockout_email
 from backend.app.core.services.activation_email import send_activation_email
 from backend.app.core.services.login_otp import send_login_otp_email
 
@@ -349,10 +350,17 @@ class UserAuthService:
     ) -> None:
         user.failed_login_attempts += 1
 
-        user.last_failed_login = datetime.now(timezone.utc)
+        current_time = datetime.now(timezone.utc)
+        user.last_failed_login = current_time
 
         if user.failed_login_attempts >= settings.LOGIN_ATTEMPTS_LIMIT:
             user.account_status = AccountStatusSchema.LOCKED
+
+            try:
+                await send_account_lockout_email(user.email, current_time)
+                logger.info(f"Lockout email sent to user {user.email}")
+            except Exception as e:
+                logger.error(f"Failed to send lockout email: {e}")
             logger.warning(
                 f"Account locked for user {user.email} due to too many failed login attempts"
             )

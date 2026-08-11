@@ -1,5 +1,3 @@
-from posix import access
-
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette import status
@@ -44,7 +42,7 @@ async def login(
                     error_message = (
                         f"Invalid credentials. You have {remaining_attempts} "
                         f"attempt{'s' if remaining_attempts != 1 else ''} remaining before "
-                        "your account is temporarily locked."
+                        "your account is temporarily locked"
                     )
                 else:
                     error_message = (
