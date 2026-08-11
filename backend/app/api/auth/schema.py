@@ -1,6 +1,7 @@
 import uuid
 from enum import Enum
 
+from fastapi import HTTPException
 from pydantic import EmailStr, ValidationInfo, field_validator
 from sqlmodel import Field, SQLModel
 
@@ -82,3 +83,25 @@ class LoginRequestSchema(SQLModel):
 class OTPVerifyRequestSchema(SQLModel):
     email: EmailStr
     otp: str = Field(min_length=6, max_length=6)
+
+
+class PasswordResetRequestSchema(SQLModel):
+    email: EmailStr
+
+
+class PasswordResetConfirmSchema(SQLModel):
+    new_password: str = Field(..., min_length=6, max_length=20)
+    confirm_password: str = Field(..., min_length=6, max_length=20)
+
+    @field_validator("confirm_password")
+    def check_passwords_match(cls, field_value: str, info: ValidationInfo) -> str:
+        if "new_password" in info.data and field_value != info.data["new_password"]:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "status": "error",
+                    "message": "Passwords do not match",
+                    "action": "Please enter the same password in both fields",
+                },
+            )
+        return field_value

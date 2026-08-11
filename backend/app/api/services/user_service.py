@@ -368,5 +368,42 @@ class UserAuthService:
         await session.commit()
         await session.refresh(user)
 
+    async def reset_password(
+        self, token: str, new_password: str, session: AsyncSession
+    ) -> None:
+        try:
+            payload = jwt.decode(
+                token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+            )
+
+            if payload.get("type") != "password_reset":
+                raise ValueError("Invalid password reset token")
+
+            user_id = uuid.UUID(payload.get("id"))
+            user = await self.get_user_by_id(user_id, session)
+
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"status": "error", "message": "User not found"},
+                )
+
+            user.hashed_password = hash_password(new_password)
+
+            await self.reset_user_state(user, session)
+
+            await session.commit()
+            await session.refresh(user)
+
+            logger.info(f"Password reset successful for user {user.email}")
+
+        except jwt.ExpiredSignatureError:
+            raise ValueError("Password reset token expired")
+        except jwt.InvalidTokenError:
+            raise ValueError("Invalid password reset token")
+        except Exception as e:
+            logger.error(f"Failed to reset password: {e} ")
+            raise
+
 
 user_auth_service = UserAuthService()
