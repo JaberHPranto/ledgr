@@ -285,7 +285,9 @@ class UserAuthService:
                     },
                 )
 
-            if user.otp_expiry_time is None or user.otp_expiry_time < datetime.now():
+            if user.otp_expiry_time is None or user.otp_expiry_time < datetime.now(
+                timezone.utc
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={
