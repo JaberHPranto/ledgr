@@ -1,12 +1,16 @@
 import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from pydantic import computed_field
 from sqlalchemy import func, text
 from sqlalchemy.dialects import postgresql as pg
-from sqlmodel import Column, Field
+from sqlmodel import Column, Field, Relationship
 
 from backend.app.api.auth.schema import BaseUserSchema, RoleChoicesSchema
+
+if TYPE_CHECKING:
+    from backend.app.api.user_profile.models import Profile
 
 
 class User(BaseUserSchema, table=True):
@@ -38,6 +42,11 @@ class User(BaseUserSchema, table=True):
             nullable=False,
             onupdate=func.current_timestamp(),
         ),
+    )
+
+    profile: "Profile" = Relationship(
+        back_populates="user",
+        sa_relationship_kwargs={"uselist": False, "lazy": "select"},
     )
 
     @computed_field
