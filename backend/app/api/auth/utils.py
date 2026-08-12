@@ -115,7 +115,7 @@ def set_auth_cookies(
     )
 
 
-async def delete_auth_cookies(response: Response) -> None:
+def delete_auth_cookies(response: Response) -> None:
     response.delete_cookie(settings.COOKIE_ACCESS_NAME)
     response.delete_cookie(settings.COOKIE_REFRESH_NAME)
     response.delete_cookie(settings.COOKIE_LOGGED_IN_NAME)
