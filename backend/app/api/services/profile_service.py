@@ -1,14 +1,18 @@
 import uuid
 
 from fastapi import HTTPException
-from sqlalchemy.sql.functions import user
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette import status
 
 from backend.app.api.user_profile.models import Profile
-from backend.app.api.user_profile.schema import ProfileCreateSchema, ProfileUpdateSchema
+from backend.app.api.user_profile.schema import (
+    ImageTypeEnum,
+    ProfileCreateSchema,
+    ProfileUpdateSchema,
+)
 from backend.app.core.logging import get_logger
+from backend.app.core.tasks import upload_image_task
 
 logger = get_logger()
 
@@ -94,5 +98,79 @@ async def update_user_profile(
             detail={
                 "status": "error",
                 "message": "Failed to update user profile",
+            },
+        )
+
+
+def initiate_image_upload(
+    file_content: bytes,
+    image_type: ImageTypeEnum,
+    content_type: str,
+    user_id: uuid.UUID,
+):
+    try:
+        task = upload_image_task.delay(  # type: ignore
+            str(user_id), file_content, image_type.value, content_type
+        )
+
+        return task.id
+    except Exception as e:
+        logger.error(f"Error initiating image upload: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "message": "Failed to initiate image upload",
+            },
+        )
+
+
+async def upload_profile_image_url(
+    user_id: uuid.UUID, image_type: ImageTypeEnum, image_url: str, session: AsyncSession
+):
+    try:
+        profile = await get_user_profile(user_id, session)
+        if not profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "status": "error",
+                    "message": "User profile not found",
+                },
+            )
+
+        field_mapping = {
+            ImageTypeEnum.PROFILE_PHOTO: "profile_photo_url",
+            ImageTypeEnum.ID_PHOTO: "id_photo_url",
+            ImageTypeEnum.SIGNATURE_PHOTO: "signature_photo_url",
+        }
+
+        field_name = field_mapping[image_type]
+
+        if not field_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "status": "error",
+                    "message": "Invalid image type",
+                },
+            )
+
+        setattr(profile, field_name, image_url)
+
+        await session.commit()
+        await session.refresh(profile)
+        return profile
+
+    except HTTPException as http_ex:
+        raise http_ex
+
+    except Exception as e:
+        logger.error(f"Error uploading profile image: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "message": "Failed to upload profile image",
             },
         )

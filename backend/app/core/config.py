@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str = ""
 
     ALLOWED_MIME_TYPES: list[str] = ["image/png", "image/jpeg", "image/jpg"]
-    MAX_FILE_SIZE: int = 5 * 1024 * 1024  # 5 MB
+    MAX_FILE_SIZE: int = 5 * 1024 * 1024  # 5 MB (in bytes)
     MAX_DIMENSIONS: int = 4096
 
 

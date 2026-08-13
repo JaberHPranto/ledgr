@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
-from starlette import status
 
 from backend.app.api.routes.auth.deps import CurrentUser
 from backend.app.api.services import profile_service

@@ -103,6 +103,7 @@ services:
       - redis
       - rabbitmq
     volumes:
+      - .:/src
       - ledgr_flower_data:/data
     networks:
       - ledgr_local_network
