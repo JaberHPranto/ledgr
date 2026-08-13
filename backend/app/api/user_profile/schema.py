@@ -1,11 +1,12 @@
 from datetime import date
 from enum import Enum
 
-from pydantic import ValidationInfo, field_validator
+from pydantic import ConfigDict, ValidationInfo, field_validator
 from pydantic_extra_types.country import CountryShortName
 from pydantic_extra_types.phone_numbers import PhoneNumber
 from sqlmodel import Field, SQLModel
 
+from backend.app.api.auth.schema import RoleChoicesSchema
 from backend.app.api.user_profile.utils import validate_id_dates
 
 
@@ -113,3 +114,14 @@ class ProfileUpdateSchema(SQLModel):
         if v is not None and "id_issue_date" in values.data:
             validate_id_dates(values.data["id_issue_date"], v)
         return v
+
+
+class ProfileResponseSchema(SQLModel):
+    username: str
+    first_name: str
+    middle_name: str
+    last_name: str
+    email: str
+    id_no: int
+    role: RoleChoicesSchema
+    profile: ProfileBaseSchema | None

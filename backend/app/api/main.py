@@ -9,7 +9,7 @@ from backend.app.api.routes.auth import (
     refresh,
     register,
 )
-from backend.app.api.routes.profile import create, update, upload
+from backend.app.api.routes.profile import create, me, update, upload
 
 api_router = APIRouter()
 
@@ -23,3 +23,4 @@ api_router.include_router(logout.router)
 api_router.include_router(create.router)
 api_router.include_router(update.router)
 api_router.include_router(upload.router)
+api_router.include_router(me.router)
