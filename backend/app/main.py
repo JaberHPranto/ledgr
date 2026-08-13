@@ -2,9 +2,8 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
-from starlette import status
 
 from backend.app.api.main import api_router
 from backend.app.core.config import settings

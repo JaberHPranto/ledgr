@@ -1,11 +1,13 @@
 import uuid
 
 from fastapi import HTTPException
-from sqlmodel import select
+from sqlalchemy.orm import selectinload
+from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette import status
 
 from backend.app.api.auth.models import User
+from backend.app.api.auth.schema import RoleChoicesSchema
 from backend.app.api.user_profile.models import Profile
 from backend.app.api.user_profile.schema import (
     ImageTypeEnum,
@@ -202,5 +204,48 @@ async def get_user_with_profile(user_id: uuid.UUID, session: AsyncSession):
             detail={
                 "status": "error",
                 "message": "Failed to get user with profile",
+            },
+        )
+
+
+async def get_all_user_profiles(
+    session: AsyncSession, current_user: User, offset: int = 0, limit: int = 10
+) -> tuple[list[User], int]:
+    try:
+        if current_user.role != RoleChoicesSchema.BRANCH_MANAGER:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "status": "error",
+                    "message": "You do not have permission to view this resource",
+                    "action": "Please contact your branch manager to request access",
+                },
+            )
+
+        count_statement = select(func.count()).select_from(User)
+        total_count = (await session.exec(count_statement)).one()
+
+        statement = (
+            select(User)
+            .options(selectinload(User.profile))  # type: ignore
+            .offset(offset)
+            .limit(limit)
+            .order_by(col(User.created_at).desc())
+        )
+        result = await session.exec(statement)
+        users = result.all()
+
+        return list(users), total_count
+
+    except HTTPException as http_ex:
+        raise http_ex
+    except Exception as e:
+        logger.error(f"Error fetching all user profiles: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "message": "Failed to fetch user profiles",
+                "action": "Please try again later",
             },
         )

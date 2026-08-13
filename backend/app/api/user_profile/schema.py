@@ -119,9 +119,16 @@ class ProfileUpdateSchema(SQLModel):
 class ProfileResponseSchema(SQLModel):
     username: str
     first_name: str
-    middle_name: str
+    middle_name: str | None
     last_name: str
     email: str
     id_no: int
     role: RoleChoicesSchema
     profile: ProfileBaseSchema | None
+
+
+class PaginatedProfileResponseSchema(SQLModel):
+    profiles: list[ProfileResponseSchema]
+    total: int
+    offset: int
+    limit: int
