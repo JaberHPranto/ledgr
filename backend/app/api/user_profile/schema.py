@@ -1,52 +1,19 @@
 from datetime import date
-from enum import Enum
 
-from pydantic import ConfigDict, ValidationInfo, field_validator
+from pydantic import ValidationInfo, field_validator
 from pydantic_extra_types.country import CountryShortName
 from pydantic_extra_types.phone_numbers import PhoneNumber
 from sqlmodel import Field, SQLModel
 
 from backend.app.api.auth.schema import RoleChoicesSchema
+from backend.app.api.user_profile.enum import (
+    EmploymentStatusEnum,
+    GenderEnum,
+    IdentificationTypeEnum,
+    MaritalStatusEnum,
+    SalutationEnum,
+)
 from backend.app.api.user_profile.utils import validate_id_dates
-
-
-class SalutationEnum(str, Enum):
-    Mr = "Mr"
-    Mrs = "Mrs"
-    Miss = "Miss"
-
-
-class GenderEnum(str, Enum):
-    Male = "Male"
-    Female = "Female"
-    Other = "Other"
-
-
-class MaritalStatusEnum(str, Enum):
-    Married = "Married"
-    Divorced = "Divorced"
-    Single = "Single"
-    Widowed = "Widowed"
-
-
-class IdentificationTypeEnum(str, Enum):
-    Passport = "Passport"
-    Drivers_License = "Drivers_License"
-    National_ID = "National_ID"
-
-
-class EmploymentStatusEnum(str, Enum):
-    Employed = "Employed"
-    Unemployed = "Unemployed"
-    Self_Employed = "Self_Employed"
-    Student = "Student"
-    Retired = "Retired"
-
-
-class ImageTypeEnum(str, Enum):
-    PROFILE_PHOTO = "profile_photo"
-    ID_PHOTO = "id_photo"
-    SIGNATURE_PHOTO = "signature_photo"
 
 
 class ProfileBaseSchema(SQLModel):

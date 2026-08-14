@@ -3,7 +3,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.api.routes.auth.deps import CurrentUser
 from backend.app.api.services import profile_service
-from backend.app.api.user_profile.schema import ImageTypeEnum
+from backend.app.api.user_profile.enum import ImageTypeEnum
 from backend.app.core.celery_app import celery_app
 from backend.app.core.db import get_session
 from backend.app.core.logging import get_logger

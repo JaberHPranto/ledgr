@@ -8,9 +8,9 @@ from starlette import status
 
 from backend.app.api.auth.models import User
 from backend.app.api.auth.schema import RoleChoicesSchema
+from backend.app.api.user_profile.enum import ImageTypeEnum
 from backend.app.api.user_profile.models import Profile
 from backend.app.api.user_profile.schema import (
-    ImageTypeEnum,
     ProfileCreateSchema,
     ProfileUpdateSchema,
 )

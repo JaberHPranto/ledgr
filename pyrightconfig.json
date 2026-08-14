@@ -1,0 +1,6 @@
+{
+  "typeCheckingMode": "standard",
+  "reportCallInDefaultInitializer": "none",
+  "reportAny": "none",
+  "reportExplicitAny": "none"
+}
