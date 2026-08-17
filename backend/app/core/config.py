@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 5 * 1024 * 1024  # 5 MB (in bytes)
     MAX_DIMENSIONS: int = 4096
 
+    BANK_CODE: str = ""
+    BANK_BRANCH_CODE: str = ""
+
+    CURRENCY_CODE_USD: str = ""
+    CURRENCY_CODE_EUR: str = ""
+    CURRENCY_CODE_GBP: str = ""
+
+    MAX_BANK_ACCOUNTS: int = 3
+
 
 settings = Settings()
 

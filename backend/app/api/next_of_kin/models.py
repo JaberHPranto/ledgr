@@ -35,7 +35,7 @@ class NextOfKin(NextOfKinBaseSchema, table=True):
         ),
     )
 
-    user_id: uuid.UUID = Field(foreign_key="user.id")
+    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
     user: "User" = Relationship(
         back_populates="next_of_kins",
     )
