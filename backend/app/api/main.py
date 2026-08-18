@@ -9,6 +9,7 @@ from backend.app.api.routes.auth import (
     refresh,
     register,
 )
+from backend.app.api.routes.bank_account import activate as bank_account_activate
 from backend.app.api.routes.bank_account import create as bank_account_create
 from backend.app.api.routes.next_of_kin import all as next_of_kin_all
 from backend.app.api.routes.next_of_kin import create as next_of_kin_create
@@ -39,3 +40,4 @@ api_router.include_router(next_of_kin_delete.router)
 api_router.include_router(next_of_kin_all.router)
 
 api_router.include_router(bank_account_create.router)
+api_router.include_router(bank_account_activate.router)

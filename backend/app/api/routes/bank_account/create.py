@@ -43,7 +43,7 @@ async def create_bank_account_route(
                 account_number=account.account_number,
                 account_name=account.account_name,
                 account_type=account.account_type,
-                currency=account.currency,
+                currency=account.currency.value,
                 identification_type=user.profile.means_of_identification.value,
             )
         except Exception as e:

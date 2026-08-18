@@ -1,12 +1,13 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from starlette import status
 
 from backend.app.api.auth.models import User
+from backend.app.api.bank_account.enums import AccountStatusEnum
 from backend.app.api.bank_account.models import BankAccount
 from backend.app.api.bank_account.schema import BankAccountCreateSchema
 from backend.app.api.bank_account.utils import generate_account_number
@@ -117,4 +118,55 @@ async def create_bank_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create bank account",
+        )
+
+
+async def activate_bank_account(
+    account_id: UUID, verified_by: UUID, session: AsyncSession
+) -> tuple[BankAccount, User]:
+    try:
+        statement = (
+            select(BankAccount, User)
+            .join(User)
+            .where(BankAccount.id == account_id, BankAccount.user_id != verified_by)
+        )
+        result = await session.exec(statement)
+        account_user_tuple = result.first()
+
+        if not account_user_tuple:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Bank account not found",
+            )
+
+        bank_account, user = account_user_tuple
+
+        if bank_account.account_status == AccountStatusEnum.Active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Bank account is already active",
+            )
+
+        bank_account.kyc_submitted = True
+        bank_account.kyc_verified = True
+        bank_account.kyc_verified_by = verified_by
+        bank_account.kyc_verified_on = datetime.now(timezone.utc)
+        bank_account.account_status = AccountStatusEnum.Active
+
+        session.add(bank_account)
+        await session.commit()
+        await session.refresh(bank_account)
+
+        return bank_account, user
+
+    except HTTPException as http_ex:
+        await session.rollback()
+        raise http_ex
+
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Failed to activate bank account: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to activate bank account",
         )
