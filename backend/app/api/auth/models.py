@@ -12,6 +12,7 @@ from backend.app.api.auth.schema import BaseUserSchema, RoleChoicesSchema
 if TYPE_CHECKING:
     from backend.app.api.bank_account.models import BankAccount
     from backend.app.api.next_of_kin.models import NextOfKin
+    from backend.app.api.transactions.models import Transaction
     from backend.app.api.user_profile.models import Profile
 
 
@@ -58,6 +59,21 @@ class User(BaseUserSchema, table=True):
 
     bank_accounts: list["BankAccount"] = Relationship(
         back_populates="user",
+    )
+
+    sent_transactions: list["Transaction"] = Relationship(
+        back_populates="sender",
+        sa_relationship_kwargs={"foreign_keys": "Transaction.sender_id"},
+    )
+
+    received_transactions: list["Transaction"] = Relationship(
+        back_populates="receiver",
+        sa_relationship_kwargs={"foreign_keys": "Transaction.receiver_id"},
+    )
+
+    processed_transactions: list["Transaction"] = Relationship(
+        back_populates="processor",
+        sa_relationship_kwargs={"foreign_keys": "Transaction.processed_by"},
     )
 
     @computed_field
