@@ -48,7 +48,36 @@ class TransactionUpdateSchema(TransactionBaseSchema):
     pass
 
 
+class TransferRequestSchema(SQLModel):
+    sender_account_id: uuid.UUID
+    receiver_account_number: str = Field(min_length=16, max_length=16)
+    amount: Decimal = Field(ge=0, decimal_places=2)
+    security_answer: str = Field(max_length=30)
+    description: str = Field(max_length=250)
+
+
 class DepositRequestSchema(SQLModel):
     account_id: uuid.UUID
     amount: Decimal = Field(ge=0, decimal_places=2)
     description: str = Field(max_length=250)
+
+
+class TransferOTPVerificationSchema(SQLModel):
+    transfer_reference: str
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class TransferResponseSchema(SQLModel):
+    status: str
+    message: str
+    data: dict | None = None
+
+
+class CurrencyConversionSchema(SQLModel):
+    amount: Decimal
+    from_currency: str
+    to_currency: str
+    exchange_rate: Decimal
+    original_amount: Decimal
+    converted_amount: Decimal
+    conversion_fee: Decimal = Field(default=Decimal("0.00"))
