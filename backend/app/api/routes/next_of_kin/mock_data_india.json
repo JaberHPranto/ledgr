@@ -1,0 +1,15 @@
+{
+  "male_indian_next_of_kin": {
+    "full_name": "Rajesh Kumar Sharma",
+    "relationship": "Sibling",
+    "email": "rajesh.sharma@example.com",
+    "phone": "+919876543210",
+    "address": "12 MG Road, Andheri West",
+    "city": "Mumbai",
+    "country": "India",
+    "nationality": "Indian",
+    "id_number": "AADHAAR123456789012",
+    "passport_number": "M1234567",
+    "is_primary": true
+  }
+}

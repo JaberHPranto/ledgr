@@ -1,4 +1,4 @@
-import secrets
+import uuid
 from datetime import datetime, timezone
 from logging import getLogger
 from typing import Optional
@@ -12,7 +12,6 @@ from backend.app.api.transactions.enums import (
     TransactionStatusEnum,
 )
 from backend.app.api.transactions.models import Transaction
-from backend.app.core.config import settings
 
 logger = getLogger()
 
@@ -26,7 +25,7 @@ async def mark_transaction_failed(
 ):
     try:
         transaction.status = TransactionStatusEnum.Failed
-        transaction.failure_reason = reason
+        transaction.failed_reason = reason
 
         current_metadata = transaction.transaction_metadata or {}
 
@@ -59,3 +58,7 @@ async def mark_transaction_failed(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
+
+
+def generate_transaction_reference(prefix: str) -> str:
+    return f"{prefix}{uuid.uuid4().hex[:8].upper()}"

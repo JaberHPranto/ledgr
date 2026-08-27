@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRATION_MINUTES: int = 30 if ENVIRONMENT == "local" else 15
-    JWT_REFRESH_TOKEN_EXPIRATION_DAYS: int = 1
+    JWT_REFRESH_TOKEN_EXPIRATION_DAYS: int = 7 if ENVIRONMENT == "local" else 1
 
     COOKIE_SECURE: bool = False if ENVIRONMENT == "local" else True
     COOKIE_ACCESS_NAME: str = "access_token"

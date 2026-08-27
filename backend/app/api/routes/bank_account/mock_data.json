@@ -1,0 +1,49 @@
+{
+  "transfer_initiate_same_currency": {
+    "sender_account_id": "REPLACE_WITH_REAL_SENDER_ACCOUNT_UUID",
+    "receiver_account_number": "REPLACE_16_DIGIT",
+    "amount": "100.00",
+    "security_answer": "REPLACE_WITH_SENDER_SECURITY_ANSWER",
+    "description": "Rent payment"
+  },
+  "transfer_initiate_cross_currency": {
+    "sender_account_id": "REPLACE_WITH_REAL_SENDER_ACCOUNT_UUID",
+    "receiver_account_number": "REPLACE_16_DIGIT",
+    "amount": "250.50",
+    "security_answer": "REPLACE_WITH_SENDER_SECURITY_ANSWER",
+    "description": "Invoice payment"
+  },
+  "transfer_initiate_invalid_receiver_length": {
+    "sender_account_id": "REPLACE_WITH_REAL_SENDER_ACCOUNT_UUID",
+    "receiver_account_number": "12345",
+    "amount": "50.00",
+    "security_answer": "REPLACE_WITH_SENDER_SECURITY_ANSWER",
+    "description": "Should fail 422 - receiver_account_number must be exactly 16 chars"
+  },
+  "transfer_initiate_negative_amount": {
+    "sender_account_id": "REPLACE_WITH_REAL_SENDER_ACCOUNT_UUID",
+    "receiver_account_number": "REPLACE_16_DIGIT",
+    "amount": "-10.00",
+    "security_answer": "REPLACE_WITH_SENDER_SECURITY_ANSWER",
+    "description": "Should fail 422 - amount must be >= 0"
+  },
+  "transfer_initiate_self_transfer": {
+    "sender_account_id": "REPLACE_WITH_REAL_SENDER_ACCOUNT_UUID",
+    "receiver_account_number": "REPLACE_WITH_SENDERS_OWN_ACCOUNT_NUMBER",
+    "amount": "10.00",
+    "security_answer": "REPLACE_WITH_SENDER_SECURITY_ANSWER",
+    "description": "Should fail 406 - cannot transfer to own account"
+  },
+  "transfer_complete_valid": {
+    "transfer_reference": "REPLACE_WITH_REFERENCE_FROM_INITIATE_RESPONSE",
+    "otp": "REPLACE_WITH_6_DIGIT_OTP_FROM_EMAIL"
+  },
+  "transfer_complete_bad_otp": {
+    "transfer_reference": "REPLACE_WITH_REFERENCE_FROM_INITIATE_RESPONSE",
+    "otp": "000000"
+  },
+  "transfer_complete_bad_otp_length": {
+    "transfer_reference": "REPLACE_WITH_REFERENCE_FROM_INITIATE_RESPONSE",
+    "otp": "123"
+  }
+}

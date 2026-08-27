@@ -11,7 +11,7 @@ from backend.app.api.routes.auth import (
 )
 from backend.app.api.routes.bank_account import activate as bank_account_activate
 from backend.app.api.routes.bank_account import create as bank_account_create
-from backend.app.api.routes.bank_account import deposit as bank_account_deposit
+from backend.app.api.routes.bank_account import deposit, transfer
 from backend.app.api.routes.next_of_kin import all as next_of_kin_all
 from backend.app.api.routes.next_of_kin import create as next_of_kin_create
 from backend.app.api.routes.next_of_kin import delete as next_of_kin_delete
@@ -42,4 +42,5 @@ api_router.include_router(next_of_kin_all.router)
 
 api_router.include_router(bank_account_create.router)
 api_router.include_router(bank_account_activate.router)
-api_router.include_router(bank_account_deposit.router)
+api_router.include_router(deposit.router)
+api_router.include_router(transfer.router)
