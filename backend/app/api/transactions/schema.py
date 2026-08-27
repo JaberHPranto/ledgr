@@ -81,3 +81,10 @@ class CurrencyConversionSchema(SQLModel):
     original_amount: Decimal
     converted_amount: Decimal
     conversion_fee: Decimal = Field(default=Decimal("0.00"))
+
+
+class WithdrawalRequestSchema(SQLModel):
+    account_number: str = Field(min_length=16, max_length=16)
+    amount: Decimal = Field(ge=0, decimal_places=2)
+    username: str = Field(min_length=1, max_length=12)
+    description: str = Field(max_length=250)

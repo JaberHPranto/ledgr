@@ -475,3 +475,89 @@ async def complete_transfer(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"status": "error", "message": "Failed to complete transfer"},
         )
+
+
+async def process_withdrawal(
+    *,
+    account_number: str,
+    amount: Decimal,
+    username: str,
+    description: str,
+    session: AsyncSession,
+) -> Tuple[Transaction, BankAccount, User]:
+    try:
+        stmt = (
+            select(BankAccount, User)
+            .join(User)
+            .where(
+                BankAccount.account_number == account_number, User.username == username
+            )
+        )
+
+        account_result = await session.exec(stmt)
+        account_data = account_result.first()
+
+        if not account_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"status": "error", "message": "Account not found"},
+            )
+
+        account, user = account_data
+
+        if account.account_status != AccountStatusEnum.Active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"status": "error", "message": "Account is not active"},
+            )
+
+        if Decimal(str(account.balance)) < amount:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"status": "error", "message": "Insufficient funds"},
+            )
+
+        reference = generate_transaction_reference("WTH")
+
+        balance_before = Decimal(str(account.balance))
+        balance_after = balance_before - amount
+
+        transaction = Transaction(
+            amount=amount,
+            description=description,
+            reference=reference,
+            transaction_type=TransactionTypeEnum.Withdrawal,
+            transaction_category=TransactionCategoryEnum.Debit,
+            status=TransactionStatusEnum.Completed,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            sender_account_id=account.id,
+            sender_id=user.id,
+            completed_at=datetime.now(timezone.utc),
+            transaction_metadata={
+                "currency": account.currency.value,
+                "account_number": account.account_number,
+                "withdrawal_method": "cash",
+            },
+        )
+
+        account.balance = float(balance_after)
+
+        session.add(transaction)
+        session.add(account)
+        await session.commit()
+        await session.refresh(transaction)
+        await session.refresh(account)
+
+        return transaction, account, user
+
+    except HTTPException as http_ex:
+        await session.rollback()
+        raise http_ex
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Failed to complete withdrawal: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"status": "error", "message": "Failed to complete withdrawal"},
+        )
