@@ -1,6 +1,7 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Tuple
+from typing import Any, Tuple
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -26,6 +27,7 @@ from backend.app.api.transactions.utils import (
 )
 from backend.app.core.config import settings
 from backend.app.core.logging import get_logger
+from backend.app.core.tasks import generate_statement_task
 
 logger = get_logger()
 
@@ -99,9 +101,9 @@ async def process_deposit(
     except HTTPException as http_ex:
         await session.rollback()
         raise http_ex
-    except Exception as e:
+    except Exception as ex:
         await session.rollback()
-        logger.error(f"Failed to process deposit: {e}")
+        logger.error(f"Failed to process deposit: {ex}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"status": "error", "message": "Failed to process deposit"},
@@ -664,4 +666,217 @@ async def get_user_transactions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"status": "error", "message": "Failed to get user transactions"},
+        )
+
+
+async def get_user_statement_data(
+    user_id: UUID,
+    start_date: datetime,
+    end_date: datetime,
+    session: AsyncSession,
+) -> Tuple[dict[str, Any], list[Transaction]]:
+    try:
+        user = await session.get(User, user_id)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"status": "error", "message": "User not found"},
+            )
+
+        full_name = f"{user.first_name} {user.middle_name if user.middle_name else ''} {user.last_name}".title().strip()
+
+        user_info = {
+            "username": user.username,
+            "email": user.email,
+            "full_name": full_name,
+        }
+
+        txn_statement = (
+            select(Transaction)
+            .where(
+                (Transaction.sender_id == user_id)
+                | (Transaction.receiver_id == user_id),
+                Transaction.created_at >= start_date,
+                Transaction.created_at <= end_date,
+            )
+            .order_by(desc(Transaction.created_at))
+        )
+        txn_result = await session.exec(txn_statement)
+        transactions = txn_result.all()
+
+        return user_info, list(transactions)
+
+    except Exception as ex:
+        await session.rollback()
+        logger.error(f"Failed to get user statement data: {ex}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"status": "error", "message": "Failed to get user statement data"},
+        )
+
+
+async def prepare_statement_data(
+    user_id: UUID,
+    start_date: datetime,
+    end_date: datetime,
+    session: AsyncSession,
+    account_number: str | None = None,
+) -> dict:
+    try:
+        user = await session.get(User, user_id)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"status": "error", "message": "User not found"},
+            )
+
+        if account_number:
+            accounts_query = select(BankAccount).where(
+                BankAccount.account_number == account_number,
+                BankAccount.user_id == user_id,
+            )
+            account_result = await session.exec(accounts_query)
+            account = account_result.first()
+
+            if not account:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "status": "error",
+                        "message": "Account not found or does not belong to the user",
+                    },
+                )
+
+            accounts = [account]
+
+        else:
+            accounts_query = select(BankAccount).where(BankAccount.user_id == user_id)
+            accounts_result = await session.exec(accounts_query)
+            accounts = accounts_result.all()
+
+        account_details = []
+
+        for acc in accounts:
+            account_details.append(
+                {
+                    "account_number": acc.account_number,
+                    "account_name": acc.account_name,
+                    "account_type": acc.account_type,
+                    "currency": acc.currency,
+                    "balance": str(acc.balance),
+                }
+            )
+
+        user_data = {
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "full_name": f"{user.first_name} {user.middle_name if user.middle_name else ''} {user.last_name}".title().strip(),
+            "accounts": account_details,
+        }
+
+        account_ids = [acc.id for acc in accounts]
+
+        transactions_query = (
+            select(Transaction)
+            .where(
+                or_(
+                    Transaction.sender_account_id == any_(account_ids),
+                    Transaction.receiver_account_id == any_(account_ids),
+                ),
+                Transaction.created_at >= start_date,
+                Transaction.created_at <= end_date,
+                Transaction.status == TransactionStatusEnum.Completed,
+            )
+            .order_by(desc(Transaction.created_at))
+        )
+
+        result = await session.exec(transactions_query)
+        transactions = result.all()
+
+        transactions_data = []
+
+        for txn in transactions:
+            sender_account = (
+                await session.get(BankAccount, txn.sender_account_id)
+                if txn.sender_account_id
+                else None
+            )
+            receiver_account = (
+                await session.get(BankAccount, txn.receiver_account_id)
+                if txn.receiver_account_id
+                else None
+            )
+
+            transactions_data.append(
+                {
+                    "reference": txn.reference,
+                    "amount": str(txn.amount),
+                    "description": txn.description,
+                    "created_at": txn.created_at.strftime("%Y-%m-%d"),
+                    "transaction_type": txn.transaction_type.value,
+                    "transaction_category": txn.transaction_category.value,
+                    "balance_after": str(txn.balance_after),
+                    "sender_account": (
+                        sender_account.account_number if sender_account else None
+                    ),
+                    "receiver_account": (
+                        receiver_account.account_number if receiver_account else None
+                    ),
+                    "metadata": txn.transaction_metadata,
+                }
+            )
+
+        return {
+            "user": user_data,
+            "transactions": transactions_data,
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            "is_single_account": bool(account_number),
+        }
+
+    except Exception as ex:
+        logger.error(f"Failed to prepare statement data: {ex}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"status": "error", "message": "Failed to prepare statement data"},
+        )
+
+
+async def generate_user_statement(
+    user_id: UUID,
+    start_date: datetime,
+    end_date: datetime,
+    session: AsyncSession,
+    account_number: str | None = None,
+) -> dict:
+    try:
+        statement_data = await prepare_statement_data(
+            user_id, start_date, end_date, session, account_number
+        )
+
+        statement_id = str(uuid.uuid4())
+
+        task = generate_statement_task.delay(statement_id, statement_data)  # type: ignore
+
+        return {
+            "status": "pending",
+            "message": "Statement generation task has been started",
+            "statement_id": statement_id,
+            "task_id": task.id,
+        }
+    except ValueError as ve:
+        logger.error(f"Failed to prepare statement data: {ve}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"status": "error", "message": "Invalid input"},
+        )
+    except Exception as ex:
+        logger.error(f"Failed to generate user statement: {ex}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"status": "error", "message": "Failed to generate user statement"},
         )

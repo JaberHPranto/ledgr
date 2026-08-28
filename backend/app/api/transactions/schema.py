@@ -164,7 +164,6 @@ class StatementRequestSchema(SQLModel):
         default=None,
         min_length=16,
         max_length=16,
-        description="16-digit account number for specific account statements",
     )
 
 
