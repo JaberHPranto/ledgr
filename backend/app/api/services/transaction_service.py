@@ -4,7 +4,8 @@ from typing import Tuple
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlmodel import select
+from sqlalchemy.orm import selectinload
+from sqlmodel import any_, desc, func, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.api.auth.models import User
@@ -560,4 +561,107 @@ async def process_withdrawal(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"status": "error", "message": "Failed to complete withdrawal"},
+        )
+
+
+async def get_user_transactions(
+    user_id: UUID,
+    session: AsyncSession,
+    offset: int = 0,
+    limit: int = 10,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    transaction_type: TransactionTypeEnum | None = None,
+    transaction_category: TransactionCategoryEnum | None = None,
+    transaction_status: TransactionStatusEnum | None = None,
+    min_amount: Decimal | None = None,
+    max_amount: Decimal | None = None,
+) -> Tuple[list[Transaction], int]:
+    try:
+        query = select(BankAccount.id).where(BankAccount.user_id == user_id)
+        result = await session.exec(query)
+        account_ids = [account_id for account_id in result.all()]
+
+        if not account_ids:
+            return [], 0
+
+        base_query = select(Transaction).where(
+            or_(
+                Transaction.sender_id == user_id,
+                Transaction.receiver_id == user_id,
+                Transaction.sender_account_id == any_(account_ids),
+                Transaction.receiver_account_id == any_(account_ids),
+            )
+        )
+
+        if start_date:
+            base_query = base_query.where(Transaction.created_at >= start_date)
+        if end_date:
+            base_query = base_query.where(Transaction.created_at <= end_date)
+        if transaction_type:
+            base_query = base_query.where(
+                Transaction.transaction_type == transaction_type
+            )
+        if transaction_category:
+            base_query = base_query.where(
+                Transaction.transaction_category == transaction_category
+            )
+        if transaction_status:
+            base_query = base_query.where(Transaction.status == transaction_status)
+        if min_amount is not None:
+            base_query = base_query.where(Transaction.amount >= min_amount)
+        if max_amount is not None:
+            base_query = base_query.where(Transaction.amount <= max_amount)
+
+        count_query = select(func.count()).select_from(base_query.subquery())
+        total_result = await session.exec(count_query)
+        total_count = total_result.first() or 0
+
+        page_query = (
+            base_query.options(
+                selectinload(Transaction.sender),  # type: ignore[arg-type]
+                selectinload(Transaction.receiver),  # type: ignore[arg-type]
+                selectinload(Transaction.sender_account),  # type: ignore[arg-type]
+                selectinload(Transaction.receiver_account),  # type: ignore[arg-type]
+            )
+            .order_by(desc(Transaction.created_at))
+            .offset(offset)
+            .limit(limit)
+        )
+        transactions = await session.exec(page_query)
+        transactions_list = list(transactions.all())
+
+        for transaction in transactions_list:
+            if not transaction.transaction_metadata:
+                transaction.transaction_metadata = {}
+
+            # user is sender
+            if transaction.sender_id == user_id:
+                if transaction.receiver:
+                    transaction.transaction_metadata["counterparty_name"] = (
+                        transaction.receiver.full_name
+                    )
+                if transaction.receiver_account:
+                    transaction.transaction_metadata["counterparty_account"] = (
+                        transaction.receiver_account.account_number
+                    )
+            # user is receiver
+            else:
+                if transaction.sender:
+                    transaction.transaction_metadata["counterparty_name"] = (
+                        transaction.sender.full_name
+                    )
+                if transaction.sender_account:
+                    transaction.transaction_metadata["counterparty_account"] = (
+                        transaction.sender_account.account_number
+                    )
+
+        return transactions_list, total_count
+
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Failed to get user transactions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"status": "error", "message": "Failed to get user transactions"},
         )

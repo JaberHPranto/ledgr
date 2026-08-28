@@ -88,3 +88,90 @@ class WithdrawalRequestSchema(SQLModel):
     amount: Decimal = Field(ge=0, decimal_places=2)
     username: str = Field(min_length=1, max_length=12)
     description: str = Field(max_length=250)
+
+
+class TransactionHistoryResponseSchema(SQLModel):
+    id: uuid.UUID
+    reference: str
+    amount: Decimal
+    description: str
+    transaction_type: TransactionTypeEnum
+    transaction_category: TransactionCategoryEnum
+    transaction_status: TransactionStatusEnum
+    created_at: datetime
+    completed_at: datetime | None = None
+    balance_after: Decimal
+    currency: str | None = None
+    converted_amount: str | None = None
+    from_currency: str | None = None
+    to_currency: str | None = None
+    counterparty_name: str | None = None
+    counterparty_account: str | None = None
+
+
+class PaginatedTransactionResponseSchema(SQLModel):
+    total: int
+    offset: int
+    limit: int
+    transactions: list[TransactionHistoryResponseSchema]
+
+
+class TransactionFilterParamsSchema(SQLModel):
+    model_config = {"extra": "forbid"}  # type: ignore[assignment]
+
+    limit: int = Field(
+        default=10, ge=1, le=100, description="Maximum number of transactions to return"
+    )
+    offset: int = Field(default=0, ge=0, description="Number of transactions to skip")
+    start_date: datetime | None = Field(
+        default=None,
+        description="Filter transactions from this date (inclusive)",
+        schema_extra={"examples": ["2025-01-01T00:00:00Z"]},
+    )
+    end_date: datetime | None = Field(
+        default=None,
+        description="Filter transactions up to this date (inclusive)",
+        schema_extra={"examples": ["2025-12-31T23:59:59Z"]},
+    )
+    transaction_type: TransactionTypeEnum | None = Field(
+        default=None,
+        description="Filter transactions by type",
+    )
+    transaction_category: TransactionCategoryEnum | None = Field(
+        default=None,
+        description="Filter transactions by category",
+    )
+    status: TransactionStatusEnum | None = Field(
+        default=None,
+        description="Filter transactions by status",
+    )
+    min_amount: Decimal | None = Field(
+        default=None,
+        ge=0,
+        description="Filter transactions by minimum amount",
+    )
+    max_amount: Decimal | None = Field(
+        default=None,
+        ge=0,
+        description="Filter transactions by maximum amount",
+    )
+
+
+class StatementRequestSchema(SQLModel):
+    start_date: datetime
+    end_date: datetime
+    account_number: str | None = Field(
+        default=None,
+        min_length=16,
+        max_length=16,
+        description="16-digit account number for specific account statements",
+    )
+
+
+class StatementResponseSchema(SQLModel):
+    status: str
+    message: str
+    task_id: str | None = None
+    statement_id: str | None = None
+    generated_at: datetime | None = None
+    expires_at: datetime | None = None
