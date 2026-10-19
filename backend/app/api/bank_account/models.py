@@ -11,6 +11,7 @@ from backend.app.api.bank_account.schema import BankAccountBaseSchema
 if TYPE_CHECKING:
     from backend.app.api.auth.models import User
     from backend.app.api.transactions.models import Transaction
+    from backend.app.api.virtual_card.models import VirtualCard
 
 
 class BankAccount(BankAccountBaseSchema, table=True):
@@ -54,4 +55,11 @@ class BankAccount(BankAccountBaseSchema, table=True):
     received_transactions: list["Transaction"] = Relationship(
         back_populates="receiver_account",
         sa_relationship_kwargs={"foreign_keys": "Transaction.receiver_account_id"},
+    )
+
+    virtual_cards: list["VirtualCard"] = Relationship(
+        back_populates="bank_account",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+        },
     )
