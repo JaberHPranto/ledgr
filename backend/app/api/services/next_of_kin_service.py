@@ -1,9 +1,8 @@
 import uuid
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from starlette import status
 
 from backend.app.api.next_of_kin.models import NextOfKin
 from backend.app.api.next_of_kin.schema import (

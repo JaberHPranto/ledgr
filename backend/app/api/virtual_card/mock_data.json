@@ -1,0 +1,118 @@
+{
+  "create": {
+    "valid_usd_debit": {
+      "expect": "201, card_status=pending (account must be active, currency USD)",
+      "body": {
+        "bank_account_id": "<ACTIVE_USD_ACCOUNT_UUID>",
+        "card_type": "debit",
+        "card_brand": "visa",
+        "currency": "USD",
+        "name_on_card": "JOHN A DOE",
+        "daily_limit": 500,
+        "monthly_limit": 5000
+      }
+    },
+    "valid_eur_credit": {
+      "expect": "201 only if the account is an active EUR account",
+      "body": {
+        "bank_account_id": "<ACTIVE_EUR_ACCOUNT_UUID>",
+        "card_type": "credit",
+        "currency": "EUR",
+        "name_on_card": "JANE MARIE SMITH",
+        "daily_limit": 1000,
+        "monthly_limit": 10000
+      }
+    },
+    "currency_mismatch": {
+      "expect": "400 Currency does not match with bank account currency",
+      "body": {
+        "bank_account_id": "<ACTIVE_USD_ACCOUNT_UUID>",
+        "card_type": "debit",
+        "currency": "GBP",
+        "name_on_card": "JOHN A DOE",
+        "daily_limit": 500,
+        "monthly_limit": 5000
+      }
+    },
+    "zero_limit": {
+      "expect": "422 daily_limit must be > 0",
+      "body": {
+        "bank_account_id": "<ACTIVE_USD_ACCOUNT_UUID>",
+        "card_type": "debit",
+        "currency": "USD",
+        "name_on_card": "JOHN A DOE",
+        "daily_limit": 0,
+        "monthly_limit": 5000
+      }
+    },
+    "inactive_account": {
+      "expect": "400 Account is not active",
+      "body": {
+        "bank_account_id": "<PENDING_ACCOUNT_UUID>",
+        "card_type": "debit",
+        "currency": "USD",
+        "name_on_card": "JOHN A DOE",
+        "daily_limit": 500,
+        "monthly_limit": 5000
+      }
+    }
+  },
+  "block": {
+    "lost": {
+      "block_reason": "lost",
+      "block_reason_description": "Left the card in a taxi."
+    },
+    "stolen": {
+      "block_reason": "stolen",
+      "block_reason_description": "Wallet stolen on the metro."
+    },
+    "suspicious_activity": {
+      "block_reason": "suspicious_activity",
+      "block_reason_description": "Unrecognised charges seen in the app."
+    },
+    "customer_request": {
+      "block_reason": "customer_request",
+      "block_reason_description": "Customer asked to freeze the card."
+    },
+    "invalid_reason": {
+      "expect": "422 block_reason not in enum",
+      "block_reason": "bored",
+      "block_reason_description": "Not a valid reason."
+    }
+  },
+  "top_up": {
+    "idempotency_key_header": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "valid": {
+      "expect": "200 (card must be active; account_number must belong to the card's account)",
+      "body": {
+        "account_number": "<16_DIGIT_ACCOUNT_NUMBER>",
+        "amount": 100.5,
+        "description": "Monthly spending money"
+      }
+    },
+    "zero_amount": {
+      "expect": "422 amount must be > 0",
+      "body": {
+        "account_number": "<16_DIGIT_ACCOUNT_NUMBER>",
+        "amount": 0,
+        "description": "Nothing"
+      }
+    },
+    "short_account_number": {
+      "expect": "422 account_number must be exactly 16 chars",
+      "body": {
+        "account_number": "12345",
+        "amount": 50,
+        "description": "Bad account number"
+      }
+    },
+    "wrong_account": {
+      "expect": "404 Card or account not found (card not linked to this account)",
+      "body": {
+        "account_number": "<ANOTHER_ACCOUNTS_16_DIGIT_NUMBER>",
+        "amount": 50,
+        "description": "Account does not own this card"
+      }
+    }
+  }
+}

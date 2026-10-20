@@ -72,6 +72,12 @@ class PhysicalCardRequestSchema(SQLModel):
     postal_code: str = Field(max_length=20)
 
 
+class CardTopUpSchema(SQLModel):
+    account_number: str = Field(min_length=16, max_length=16)
+    amount: float = Field(gt=0)
+    description: str = Field(max_length=250)
+
+
 class CardTopUpResponseSchema(SQLModel):
     status: str
     message: str
