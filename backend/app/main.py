@@ -10,6 +10,7 @@ from backend.app.core.config import settings
 from backend.app.core.db import engine, init_db
 from backend.app.core.health import ServiceStatus, health_checker
 from backend.app.core.logging import get_logger
+from backend.app.core.rate_limit.middleware import RateLimitMiddleware
 
 logger = get_logger()
 
@@ -107,4 +108,5 @@ async def health_check():
         )
 
 
+app.add_middleware(RateLimitMiddleware)
 app.include_router(api_router, prefix=settings.API_V1)
