@@ -28,13 +28,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp):
         super().__init__(app)
 
-        # ponytail: no startup ping (async client can't be awaited here); a down Redis fails open per request
-        self.redis_client = Redis(
-            host=settings.REDIS_HOST,
-            port=settings.REDIS_PORT,
-            db=settings.REDIS_DB,
-            decode_responses=True,
-        )
+        try:
+            self.redis_client = Redis(
+                host=settings.REDIS_HOST,
+                port=settings.REDIS_PORT,
+                db=settings.REDIS_DB,
+                decode_responses=True,
+            )
+            self.redis_client.ping()
+            logger.info("Successfully connected to Redis for rate limiting")
+        except Exception:
+            logger.warning("Failed to connect to Redis")
+            self.redis_client = None
 
     async def _get_rate_limit_key(self, request: Request, endpoint: str) -> str:
         ip = request.client.host if request.client else "anonymous"
@@ -66,6 +71,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # isRateLimited, currentCount, blockUntil
         bool, int | None, datetime | None
     ]:
+        if self.redis_client is None:
+            return False, None, None
+
         try:
             async with self.redis_client.pipeline(transaction=True) as pipe:
                 pipe.incr(key)
