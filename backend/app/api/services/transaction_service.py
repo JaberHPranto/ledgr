@@ -25,8 +25,13 @@ from backend.app.api.transactions.utils import (
     generate_transaction_reference,
     mark_transaction_failed,
 )
+from backend.app.core.ai.enums import AIReviewStatusEnum
+from backend.app.core.ai.models import TransactionRisk
+from backend.app.core.ai.service import TransactionAIService
 from backend.app.core.config import settings
 from backend.app.core.logging import get_logger
+from backend.app.core.services.transfer_alert import send_transfer_alert_email
+from backend.app.core.services.withdrawal_alert import send_withdrawal_alert
 from backend.app.core.tasks import generate_statement_task
 
 logger = get_logger()
@@ -221,6 +226,31 @@ async def initiate_transfer(
             },
         )
 
+        session.add(transaction)
+        await session.commit()
+        await session.refresh(transaction)
+
+        ai_service = TransactionAIService(session)
+        risk_analysis = await ai_service.analyze_transaction(transaction, sender.id)
+
+        if risk_analysis.get("needs_review", False):
+            await ai_service.handle_flagged_transaction(transaction, risk_analysis)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "status": "error",
+                    "message": "This transaction has been "
+                    "flagged as potentially fraudulent. An "
+                    "account executive will review the "
+                    "transaction, before its either "
+                    "approved or rejected",
+                    "risk_analysis": {
+                        "risk_score": risk_analysis["risk_score"],
+                        "risk_factors": risk_analysis["risk_factors"],
+                    },
+                },
+            )
+
         otp = generate_otp()
 
         sender.otp = otp
@@ -410,37 +440,13 @@ async def complete_transfer(
                 detail={"status": "error", "message": "Missing transaction metadata"},
             )
 
-        converted_amount_str = transaction.transaction_metadata.get("converted_amount")
-        if not converted_amount_str:
-            await mark_transaction_failed(
-                transaction=transaction,
-                reason=TransactionFailureReason.SYSTEM_ERROR,
-                details={"error": "Missing converted amount"},
-                session=session,
-                error_message="Missing converted amount",
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"status": "error", "message": "Missing converted amount"},
-            )
+        if not transaction.transaction_metadata:
+            raise ValueError("Missing transaction metadata")
 
-        try:
-            converted_amount = Decimal(converted_amount_str)
-        except (TypeError, ValueError):
-            await mark_transaction_failed(
-                transaction=transaction,
-                reason=TransactionFailureReason.SYSTEM_ERROR,
-                details={"error": "Invalid converted amount"},
-                session=session,
-                error_message="Invalid converted amount",
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"status": "error", "message": "Invalid converted amount"},
-            )
+        converted_amount = Decimal(transaction.transaction_metadata["converted_amount"])
 
         sender_account.balance = float(
-            Decimal(str(sender_account.balance)) - converted_amount
+            Decimal(str(sender_account.balance)) - transaction.amount
         )
         receiver_account.balance = float(
             Decimal(str(receiver_account.balance)) + converted_amount
@@ -544,12 +550,38 @@ async def process_withdrawal(
             },
         )
 
-        account.balance = float(balance_after)
-
         session.add(transaction)
-        session.add(account)
         await session.commit()
         await session.refresh(transaction)
+
+        ai_service = TransactionAIService(session)
+        risk_analysis = await ai_service.analyze_transaction(transaction, user.id)
+
+        if risk_analysis.get("needs_review", False):
+            await ai_service.handle_flagged_transaction(transaction, risk_analysis)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "status": "error",
+                    "message": "This transaction has been "
+                    "flagged as potentially fraudulent. An "
+                    "account executive will review the "
+                    "transaction, before its either "
+                    "approved or rejected",
+                    "risk_analysis": {
+                        "risk_score": risk_analysis["risk_score"],
+                        "risk_factors": risk_analysis["risk_factors"],
+                    },
+                },
+            )
+
+        transaction.status = TransactionStatusEnum.Completed
+        transaction.completed_at = datetime.now(timezone.utc)
+
+        account.balance = float(balance_after)
+
+        session.add(account)
+        await session.commit()
         await session.refresh(account)
 
         return transaction, account, user
@@ -879,4 +911,354 @@ async def generate_user_statement(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"status": "error", "message": "Failed to generate user statement"},
+        )
+
+
+async def review_flagged_transactions(
+    transaction_id: UUID,
+    reviewer_id: UUID,
+    is_fraud: bool,
+    approve_transaction: bool,
+    session: AsyncSession,
+    notes: str | None = None,
+) -> dict:
+    try:
+        query = (
+            select(Transaction, TransactionRisk)
+            .join(TransactionRisk)
+            .where(TransactionRisk.transaction_id == transaction_id)
+        )
+        result = await session.exec(query)
+        transaction_data = result.first()
+
+        if transaction_data is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"status": "error", "message": "Transaction not found"},
+            )
+
+        transaction, transaction_risk = transaction_data
+
+        if transaction.ai_review_status != AIReviewStatusEnum.FLAGGED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "status": "error",
+                    "message": "Transaction is not marked as flagged",
+                },
+            )
+
+        if is_fraud:
+            transaction.ai_review_status = AIReviewStatusEnum.CONFIRMED_FRAUD
+            transaction_risk.is_confirmed_fraud = True
+            transaction_risk.reviewed_by = reviewer_id
+            transaction.status = TransactionStatusEnum.Failed
+        else:
+            transaction.ai_review_status = AIReviewStatusEnum.CLEARED
+
+        if approve_transaction:
+            if transaction.transaction_type == TransactionTypeEnum.Transfer:
+                await _complete_approved_transfer(transaction, session)
+            elif transaction.transaction_type == TransactionTypeEnum.Withdrawal:
+                await _complete_approved_withdrawal(transaction, session)
+
+        if not transaction.transaction_metadata:
+            transaction.transaction_metadata = {}
+
+        transaction.transaction_metadata["fraud_review"] = {
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "reviewed_by": reviewer_id,
+            "is_fraud": is_fraud,
+            "notes": notes,
+        }
+
+        session.add(transaction)
+        await session.commit()
+        await session.refresh(transaction)
+
+        return {
+            "status": "success",
+            "message": "Transaction reviewed successfully",
+            "transaction": transaction,
+            "is_fraud": is_fraud,
+            "risk_score": transaction_risk.risk_score,
+            "review_status": transaction.ai_review_status,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"Failed to review flagged transaction: {ex}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "message": "Failed to review flagged transaction",
+            },
+        )
+
+
+async def _complete_approved_transfer(transaction: Transaction, session: AsyncSession):
+    try:
+        sender = await session.get(User, transaction.sender_id)
+
+        receiver = await session.get(User, transaction.receiver_id)
+
+        sender_account = await session.get(BankAccount, transaction.sender_account_id)
+
+        receiver_account = await session.get(
+            BankAccount, transaction.receiver_account_id
+        )
+
+        if not sender:
+            raise ValueError("Sender not found")
+        if not receiver:
+            raise ValueError("Receiver not found")
+        if not sender_account:
+            raise ValueError("Sender account not found")
+        if not receiver_account:
+            raise ValueError("Receiver account not found")
+
+        if not transaction.transaction_metadata:
+            raise ValueError("Transaction metadata is missing")
+
+        converted_amount_str = transaction.transaction_metadata.get("converted_amount")
+        if not converted_amount_str:
+            raise ValueError("Converted amount is missing in transaction metadata")
+
+        try:
+            converted_amount = Decimal(converted_amount_str)
+        except (TypeError, ValueError):
+            raise ValueError("Converted amount is not a valid decimal")
+
+        current_sender_balance = Decimal(str(sender_account.balance))
+
+        if current_sender_balance < transaction.amount:
+            raise ValueError("Insufficient balance")
+
+        try:
+            sender_account.balance = float(current_sender_balance - transaction.amount)
+            receiver_account.balance = float(
+                Decimal(str(receiver_account.balance)) + converted_amount
+            )
+
+            transaction.status = TransactionStatusEnum.Completed
+            transaction.completed_at = datetime.now(timezone.utc)
+
+            session.add(sender_account)
+            session.add(receiver_account)
+            session.add(transaction)
+
+            await session.commit()
+
+            await session.refresh(transaction)
+            await session.refresh(sender_account)
+            await session.refresh(receiver_account)
+
+            try:
+                await send_transfer_alert_email(
+                    sender_email=sender.email,
+                    receiver_email=receiver.email,
+                    sender_name=sender.full_name,
+                    receiver_name=receiver.full_name,
+                    sender_account_number=sender_account.account_number or "Unknown",
+                    receiver_account_number=receiver_account.account_number
+                    or "Unknown",
+                    amount=transaction.amount,
+                    converted_amount=converted_amount,
+                    sender_currency=sender_account.currency,
+                    receiver_currency=receiver_account.currency,
+                    exchange_rate=Decimal(
+                        transaction.transaction_metadata.get("conversion_rate", "1"),
+                    ),
+                    conversion_fee=Decimal(
+                        transaction.transaction_metadata.get("conversion_fee", "0"),
+                    ),
+                    description=transaction.description,
+                    reference=transaction.reference,
+                    transaction_date=transaction.completed_at or transaction.created_at,
+                    sender_balance=Decimal(str(sender_account.balance)),
+                    receiver_balance=Decimal(str(receiver_account.balance)),
+                )
+                logger.info(
+                    f"Successfully sent transfer approval notification for transaction {transaction.reference}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send transfer approval notification: {e}")
+
+        except Exception as e:
+            await session.rollback()
+            raise ValueError(f"Failed to process transfer: {str(e)}")
+
+    except ValueError as e:
+        await session.rollback()
+        logger.error(f"Validation error in _complete_approved_transfer: {e}")
+
+        transaction.status = TransactionStatusEnum.Failed
+        transaction.transaction_metadata = {
+            **(transaction.transaction_metadata or {}),
+            "failure_reason": str(e),
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        session.add(transaction)
+        await session.commit()
+        raise
+
+    except Exception as ex:
+        logger.error(f"Failed to complete approved transfer: {ex}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "message": "Failed to complete approved transfer",
+            },
+        )
+
+
+async def _complete_approved_withdrawal(
+    transaction: Transaction, session: AsyncSession
+):
+    try:
+        user = await session.get(User, transaction.sender_id)
+        account = await session.get(BankAccount, transaction.sender_id)
+
+        if not user:
+            raise ValueError("User not found")
+        if not account:
+            raise ValueError("Bank account not found")
+
+        if Decimal(str(account.balance)) < transaction.amount:
+            raise ValueError("Insufficient balance for withdrawal")
+
+        try:
+            account.balance = float(Decimal(str(account.balance)) - transaction.amount)
+
+            transaction.status = TransactionStatusEnum.Completed
+            transaction.completed_at = datetime.now(timezone.utc)
+
+            session.add(account)
+            session.add(transaction)
+
+            await session.commit()
+
+            await session.refresh(transaction)
+            await session.refresh(account)
+
+            try:
+                await send_withdrawal_alert(
+                    email=user.email,
+                    full_name=user.full_name,
+                    amount=transaction.amount,
+                    account_name=account.account_name,
+                    account_number=account.account_number or "Unknown",
+                    currency=account.currency.value,
+                    transaction_date=transaction.completed_at or transaction.created_at,
+                    reference=transaction.reference,
+                    balance=Decimal(str(account.balance)),
+                    description=transaction.description,
+                )
+                logger.info(
+                    f"Successfully sent withdrawal approval notification for transaction {transaction.reference}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send withdrawal approval notification: {e}")
+
+        except Exception as e:
+            await session.rollback()
+            raise ValueError(f"Failed to complete approved withdrawal: {str(e)}")
+    except ValueError as e:
+        await session.rollback()
+        logger.error(f"Validation error in _complete_approved_withdrawal: {e}")
+
+        transaction.status = TransactionStatusEnum.Failed
+        transaction.transaction_metadata = {
+            **(transaction.transaction_metadata or {}),
+            "failure_reason": str(e),
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        session.add(transaction)
+        await session.commit()
+        raise
+
+    except Exception as e:
+        logger.error(f"Failed to complete approved withdrawal: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "message": "Failed to complete approved withdrawal",
+            },
+        )
+
+
+async def get_user_risk_history(
+    user_id: uuid.UUID,
+    session: AsyncSession,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    min_risk_score: float | None = None,
+    skip: int = 0,
+    limit: int = 20,
+) -> tuple[list[dict], int]:
+    try:
+        base_query = (
+            select(Transaction, TransactionRisk)
+            .join(TransactionRisk)
+            .where(
+                Transaction.sender_id == user_id,
+            )
+        )
+
+        if start_date:
+            base_query = base_query.where(Transaction.created_at >= start_date)
+        if end_date:
+            base_query = base_query.where(Transaction.created_at <= end_date)
+        if min_risk_score is not None:
+            base_query = base_query.where(TransactionRisk.risk_score >= min_risk_score)
+
+        base_query = base_query.order_by(
+            desc(Transaction.created_at), desc(TransactionRisk.risk_score)
+        )
+
+        count_query = select(func.count()).select_from(base_query.subquery())
+        total_result = await session.exec(count_query)
+        total_count = total_result.first() or 0
+
+        paginated_query = base_query.offset(skip).limit(limit)
+        result = await session.exec(paginated_query)
+        transactions = result.all()
+
+        history = []
+
+        for transaction, risk_score in transactions:
+            history.append(
+                {
+                    "transaction_id": str(transaction.id),
+                    "reference": transaction.reference,
+                    "amount": str(transaction.amount),
+                    "created_at": transaction.created_at,
+                    "risk_score": risk_score.risk_score,
+                    "risk_factors": risk_score.risk_factors,
+                    "review_status": transaction.ai_review_status,
+                    "is_confirmed_fraud": risk_score.is_confirmed_fraud,
+                    "reviewed_by": (
+                        str(risk_score.reviewed_by) if risk_score.reviewed_by else None
+                    ),
+                    "review_details": (
+                        transaction.transaction_metadata.get("fraud_review")
+                        if transaction.transaction_metadata
+                        else None
+                    ),
+                }
+            )
+        return history, total_count
+
+    except Exception as e:
+        logger.error(f"Failed to get user risk history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "message": "Failed to get user risk history",
+            },
         )

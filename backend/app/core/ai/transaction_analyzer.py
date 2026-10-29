@@ -217,7 +217,7 @@ class TransactionAnalyzer:
                 "time": self._calculate_time_risk(
                     features["time_of_day"], features["day_of_week"]
                 ),
-                "frequency": velocity_metrics["frequency_velocity_score"],
+                "frequency": velocity_metrics["frequency_score"],
                 "pattern": features["pattern_match"],
                 "velocity_amount": velocity_metrics["amount_velocity_score"],
             }

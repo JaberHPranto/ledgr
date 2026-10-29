@@ -28,6 +28,7 @@ from backend.app.api.routes.next_of_kin import create as next_of_kin_create
 from backend.app.api.routes.next_of_kin import delete as next_of_kin_delete
 from backend.app.api.routes.next_of_kin import update as next_of_kin_update
 from backend.app.api.routes.profile import all_profiles, create, me, update, upload
+from backend.app.api.routes.transaction import fraud_review, risk_history
 
 api_router = APIRouter()
 
@@ -65,3 +66,6 @@ api_router.include_router(card_delete.router)
 api_router.include_router(card_activate.router)
 api_router.include_router(card_block.router)
 api_router.include_router(card_topup.router)
+
+api_router.include_router(fraud_review.router)
+api_router.include_router(risk_history.router)

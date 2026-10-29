@@ -178,13 +178,10 @@ class StatementResponseSchema(SQLModel):
     expires_at: datetime | None = None
 
 
-class RiskHistoryParams(SQLModel):
-    start_date: datetime | None = None
-    end_date: datetime | None = None
-    min_risk_score: float | None = None
-    user_id: str | None = None
-    offset: int = 0
-    limit: int = 10
+class TransactionReviewSchema(SQLModel):
+    is_fraud: bool
+    notes: str | None = None
+    approve_transaction: bool = False
 
 
 class RiskHistoryItemSchema(SQLModel):
